@@ -21,7 +21,7 @@ func TestCheckDNS(t *testing.T) {
 		t.Run(tc.host, func(t *testing.T) {
 			tc := tc
 			t.Parallel()
-			assert.Equal(t, tc.exp, CheckDNS(tc.host))
+			assert.Equal(t, tc.exp, HasDNS(tc.host))
 		})
 	}
 }
@@ -55,4 +55,56 @@ func TestTrimWildcard(t *testing.T) {
 		})
 	}
 
+}
+
+func TestUniqStrings(t *testing.T) {
+	for name, tc := range map[string]struct {
+		in  []string
+		exp []string
+	}{
+		"empty": {},
+		"one": {
+			in:  []string{"apple"},
+			exp: []string{"apple"},
+		},
+		"dupe": {
+			in: []string{
+				"apple",
+				"apple",
+			},
+			exp: []string{
+				"apple",
+			},
+		},
+		"list": {
+			in: []string{
+				"apple",
+				"banana",
+				"eggplant",
+				"banana",
+				"carrot",
+				"date",
+				"date",
+				"banana",
+				"date",
+				"eggplant",
+				"eggplant",
+				"fig",
+			},
+			exp: []string{
+				"apple",
+				"banana",
+				"carrot",
+				"date",
+				"eggplant",
+				"fig",
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tc := tc
+			t.Parallel()
+			assert.Equal(t, tc.exp, uniqStrings(tc.in))
+		})
+	}
 }
