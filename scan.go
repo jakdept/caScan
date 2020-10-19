@@ -9,11 +9,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/fatih/color"
 )
 
 var (
@@ -84,6 +87,27 @@ func Getx509Fingerprint(cert x509.Certificate) string {
 	return hex.EncodeToString(fingerprint[:])
 }
 
+type certSlice []x509.Certificate
+
+func (s certSlice) Len() int      { return len(s) }
+func (s certSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s certSlice) Less(i, j int) bool {
+	return Getx509Fingerprint(s[i]) < Getx509Fingerprint(s[j])
+}
+
+func (s certSlice) Dedup() certSlice {
+	if !sort.IsSorted(s) {
+		sort.Sort(s)
+	}
+	for i := 0; i < s.Len()-1; {
+		if s[i].Equal(&s[i+1]) {
+			s = append((s)[:i], s[i+1:]...)
+		}
+		i++
+	}
+	return s
+}
+
 func HasWildcard(host string) bool {
 	return strings.HasPrefix(host, "*.") || strings.Contains(host, ".*.")
 }
@@ -93,16 +117,16 @@ func TrimWildcard(host string) string {
 	return chunks[len(chunks)-1]
 }
 
-func uniqStrings(in []string) []string {
-	sort.Strings(in)
-	for i := 1; i < len(in); {
-		if in[i-1] == in[i] {
-			in = append(in[:i-1], in[i:]...)
+func uniqStrings(s []string) []string {
+	sort.Strings(s)
+	for i := 0; i < len(s)-1; {
+		if s[i] == s[i+1] {
+			s = append(s[:i], s[i+1:]...)
 		} else {
 			i++
 		}
 	}
-	return in
+	return s
 }
 
 type OutputFunc func(domain, dnsStatus string, certs ...x509.Certificate)
@@ -155,7 +179,7 @@ func GetCertificates(domain string, commonNames chan<- string, output OutputFunc
 		domain = TrimWildcard(domain)
 	}
 
-	if hosts.First(domain) {
+	if !hosts.First(domain) {
 		return
 	}
 
@@ -165,28 +189,32 @@ func GetCertificates(domain string, commonNames chan<- string, output OutputFunc
 		return
 	}
 
+	if !strings.Contains(domain, ":") {
+		domain += ":443"
+	}
+	color.NoColor = false
+	color.Yellow(domain)
+
 	conn, err := tls.Dial("tcp", domain, nil)
 	if err != nil {
+		log.Println(err)
 		dnsStatus = StatusFailedConnection
 		output(domain, dnsStatus)
 		return
 	}
 
-	certMap := make(map[string]x509.Certificate)
-	var certSlice []x509.Certificate
+	var certs certSlice
 	for _, chain := range conn.ConnectionState().VerifiedChains {
 		for _, cert := range chain {
-			certMap[Getx509Fingerprint(*cert)] = *cert
+			certs = append(certs, *cert)
 			for _, domain := range cert.DNSNames {
 				commonNames <- domain
 			}
 		}
 	}
+	certs = certs.Dedup()
 
-	for _, each := range certMap {
-		certSlice = append(certSlice, each)
-	}
-	output(domain, dnsStatus, certSlice...)
+	output(domain, dnsStatus, certs...)
 }
 
 func ScanWorker(domains chan string, output OutputFunc) {

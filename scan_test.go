@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/sebdah/goldie"
@@ -180,6 +181,27 @@ func TestCSV(t *testing.T) {
 		goldie.WithFixtureDir("testdata/golden"),
 		goldie.WithTestNameForDir(true),
 	).Assert(t, t.Name(), buf.Bytes())
+}
+
+func TestGetCertificates(t *testing.T) {
+	// buf := bytes.Buffer{}
+	buf := os.Stderr
+
+	junkChan := make(chan string)
+	go func() {
+		for {
+			<-junkChan
+		}
+	}()
+	junkChan <- "lol"
+
+	GetCertificates("example.com", junkChan, CSV(buf))
+
+	// result := bytes.Join(bytes.Split(buf.Bytes(), []byte(","))[:2], []byte(","))
+	// goldie.New(t,
+	// 	goldie.WithFixtureDir("testdata/golden"),
+	// 	goldie.WithTestNameForDir(true),
+	// ).Assert(t, t.Name(), result)
 }
 
 // this isn't working properly somehow
