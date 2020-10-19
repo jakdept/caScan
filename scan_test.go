@@ -170,22 +170,10 @@ func loadCerts(t *testing.T) (certs []x509.Certificate) {
 	return
 }
 
-func TestCSVFingerprint(t *testing.T) {
+func TestCSV(t *testing.T) {
 	buf := bytes.Buffer{}
 
-	outTest := CSVFingerprint(&buf)
-	outTest("example.com", "test status", loadCerts(t)...)
-
-	goldie.New(t,
-		goldie.WithFixtureDir("testdata/golden"),
-		goldie.WithTestNameForDir(true),
-	).Assert(t, t.Name(), buf.Bytes())
-}
-
-func TestCSVSerial(t *testing.T) {
-	buf := bytes.Buffer{}
-
-	outTest := CSVSerial(&buf)
+	outTest := CSV(&buf)
 	outTest("example.com", "test status", loadCerts(t)...)
 
 	goldie.New(t,

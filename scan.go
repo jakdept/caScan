@@ -13,11 +13,20 @@ import (
 	"sync"
 )
 
+// var (
+// 	cliDomains = flag.String("csv")
+// )
+
+func main() {
+
+}
+
 type hostList struct {
 	m map[string]struct{}
 	l sync.Mutex
 }
 
+// First returns true if it's the first time a given string has been seen.
 func (l *hostList) First(host string) bool {
 	l.l.Lock()
 	defer l.l.Unlock()
@@ -68,25 +77,16 @@ func uniqStrings(in []string) []string {
 
 type OutputFunc func(domain, dnsStatus string, certs ...x509.Certificate)
 
-func CSVFingerprint(out io.Writer) OutputFunc {
+func CSV(out io.Writer) OutputFunc {
 	return func(domain, dnsStatus string, certs ...x509.Certificate) {
 		var fingerprints []string
-		for _, cert := range certs {
-			fingerprints = append(fingerprints, Getx509Fingerprint(cert))
-		}
-		fmt.Fprintf(out, `"%s","%s","%s"`, domain, dnsStatus,
-			strings.Join(fingerprints, "|"))
-	}
-}
-
-func CSVSerial(out io.Writer) OutputFunc {
-	return func(domain, dnsStatus string, certs ...x509.Certificate) {
 		var serials []string
 		for _, cert := range certs {
 			serials = append(serials, cert.SerialNumber.String())
+			fingerprints = append(fingerprints, Getx509Fingerprint(cert))
 		}
-		fmt.Fprintf(out, `"%s","%s","%s"`, domain, dnsStatus,
-			strings.Join(serials, "|"))
+		fmt.Fprintf(out, `"%s","%s","%s","%s"`, domain, dnsStatus,
+			strings.Join(fingerprints, "|"), strings.Join(serials, "|"))
 	}
 }
 
