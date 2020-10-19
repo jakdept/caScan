@@ -15,20 +15,20 @@ import (
 
 type hostList struct {
 	m map[string]struct{}
-	l sync.RWMutex
+	l sync.Mutex
 }
 
-func (l *hostList) Mark(host string) bool {
-	l.l.RLock()
-	defer l.l.RUnlock()
+func (l *hostList) First(host string) bool {
+	l.l.Lock()
+	defer l.l.Unlock()
 	if l.m == nil {
 		l.m = map[string]struct{}{}
 	}
-	_, ok := l.m[host]
-	if !ok {
+	_, seen := l.m[host]
+	if !seen {
 		l.m[host] = struct{}{}
 	}
-	return ok
+	return !seen
 }
 
 var hosts hostList
@@ -68,7 +68,29 @@ func uniqStrings(in []string) []string {
 
 type OutputFunc func(domain, dnsStatus string, certs ...x509.Certificate)
 
-func WarnFingerprintCSV(out io.Writer, fingerprints ...string) OutputFunc {
+func CSVFingerprint(out io.Writer) OutputFunc {
+	return func(domain, dnsStatus string, certs ...x509.Certificate) {
+		var fingerprints []string
+		for _, cert := range certs {
+			fingerprints = append(fingerprints, Getx509Fingerprint(cert))
+		}
+		fmt.Fprintf(out, `"%s","%s","%s"`, domain, dnsStatus,
+			strings.Join(fingerprints, "|"))
+	}
+}
+
+func CSVSerial(out io.Writer) OutputFunc {
+	return func(domain, dnsStatus string, certs ...x509.Certificate) {
+		var serials []string
+		for _, cert := range certs {
+			serials = append(serials, cert.SerialNumber.String())
+		}
+		fmt.Fprintf(out, `"%s","%s","%s"`, domain, dnsStatus,
+			strings.Join(serials, "|"))
+	}
+}
+
+func WarnFingerprint(out io.Writer, fingerprints ...string) OutputFunc {
 	sort.Strings(fingerprints)
 	search := func(target string) bool {
 		i := sort.SearchStrings(fingerprints, target)
@@ -89,28 +111,6 @@ func WarnFingerprintCSV(out io.Writer, fingerprints ...string) OutputFunc {
 	}
 }
 
-func WriteFingerprintCSV(out io.Writer) OutputFunc {
-	return func(domain, dnsStatus string, certs ...x509.Certificate) {
-		var fingerprints []string
-		for _, cert := range certs {
-			fingerprints = append(fingerprints, Getx509Fingerprint(cert))
-		}
-		fmt.Fprintf(out, `"%s","%s","%s"`, domain, dnsStatus,
-			strings.Join(fingerprints, "|"))
-	}
-}
-
-func WriteSerialCSV(out io.Writer) OutputFunc {
-	return func(domain, dnsStatus string, certs ...x509.Certificate) {
-		var serials []string
-		for _, cert := range certs {
-			serials = append(serials, cert.SerialNumber.String())
-		}
-		fmt.Fprintf(out, `"%s","%s","%s"`, domain, dnsStatus,
-			strings.Join(serials, "|"))
-	}
-}
-
 const (
 	StatusInvalidDNS       = "invalid dns"
 	StatusValidDNS         = "valid dns"
@@ -125,7 +125,7 @@ func GetCertificates(domain string, commonNames chan<- string, output OutputFunc
 		domain = TrimWildcard(domain)
 	}
 
-	if hosts.Mark(domain) {
+	if hosts.First(domain) {
 		return
 	}
 

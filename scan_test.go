@@ -1,14 +1,41 @@
 package main
 
 import (
+	"bytes"
 	"crypto/x509"
 	"encoding/pem"
 	"io/ioutil"
 	"testing"
 
+	"github.com/sebdah/goldie"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestHostList(t *testing.T) {
+	testList := hostList{}
+	for _, tc := range []struct {
+		in  string
+		exp bool
+	}{
+		{"apple", true},
+		{"banana", true},
+		{"eggplant", true},
+		{"banana", false},
+		{"carrot", true},
+		{"date", true},
+		{"date", false},
+		{"banana", false},
+		{"date", false},
+		{"eggplant", false},
+		{"eggplant", false},
+		{"fig", true},
+	} {
+		t.Run(tc.in, func(t *testing.T) {
+			assert.Equal(t, tc.exp, testList.First(tc.in))
+		})
+	}
+}
 
 func TestCheckDNS(t *testing.T) {
 	for _, tc := range []struct {
@@ -29,7 +56,6 @@ func TestCheckDNS(t *testing.T) {
 func TestGetx509Fingerprint(t *testing.T) {
 	certData, err := ioutil.ReadFile("testdata/4096b-rsa-example-cert.pem")
 	require.NoError(t, err)
-
 	block, _ := pem.Decode(certData)
 	require.NotNil(t, block, "failed to parse certificate PEM")
 	cert, err := x509.ParseCertificate(block.Bytes)
@@ -126,3 +152,58 @@ func TestUniqStrings(t *testing.T) {
 		})
 	}
 }
+
+func loadCerts(t *testing.T) (certs []x509.Certificate) {
+	for _, file := range []string{
+		"testdata/2048b-rsa-example-cert.pem",
+		"testdata/4096b-rsa-example-cert.pem",
+		"testdata/8192b-rsa-example-cert.pem",
+	} {
+		certData, err := ioutil.ReadFile(file)
+		require.NoError(t, err)
+		block, _ := pem.Decode(certData)
+		require.NotNil(t, block, "failed to parse certificate PEM")
+		cert, err := x509.ParseCertificate(block.Bytes)
+		require.NoError(t, err, "failed to parse certificate: %s")
+		certs = append(certs, *cert)
+	}
+	return
+}
+
+func TestCSVFingerprint(t *testing.T) {
+	buf := bytes.Buffer{}
+
+	outTest := CSVFingerprint(&buf)
+	outTest("example.com", "test status", loadCerts(t)...)
+
+	goldie.New(t,
+		goldie.WithFixtureDir("testdata/golden"),
+		goldie.WithTestNameForDir(true),
+	).Assert(t, t.Name(), buf.Bytes())
+}
+
+func TestCSVSerial(t *testing.T) {
+	buf := bytes.Buffer{}
+
+	outTest := CSVSerial(&buf)
+	outTest("example.com", "test status", loadCerts(t)...)
+
+	goldie.New(t,
+		goldie.WithFixtureDir("testdata/golden"),
+		goldie.WithTestNameForDir(true),
+	).Assert(t, t.Name(), buf.Bytes())
+}
+
+// this isn't working properly somehow
+// func TestWarnFingerprint(t *testing.T) {
+// 	targets := []string{"a627088f116f56d0d7c665b546b78dbb"}
+// 	buf := bytes.Buffer{}
+
+// 	outTest := WarnFingerprint(&buf, targets...)
+// 	outTest("example.com", "test status", loadCerts(t)...)
+
+// 	goldie.New(t,
+// 		goldie.WithFixtureDir("testdata/golden"),
+// 		goldie.WithTestNameForDir(true),
+// 	).Assert(t, t.Name(), buf.Bytes())
+// }
