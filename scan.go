@@ -15,8 +15,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-
-	"github.com/fatih/color"
 )
 
 var (
@@ -189,13 +187,9 @@ func GetCertificates(domain string, commonNames chan<- string, output OutputFunc
 		return
 	}
 
-	if !strings.Contains(domain, ":") {
-		domain += ":443"
-	}
-	color.NoColor = false
-	color.Yellow(domain)
+	domain = strings.Split(domain, ":")[0]
 
-	conn, err := tls.Dial("tcp", domain, nil)
+	conn, err := tls.Dial("tcp", domain+":443", nil)
 	if err != nil {
 		log.Println(err)
 		dnsStatus = StatusFailedConnection
