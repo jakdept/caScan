@@ -1,24 +1,54 @@
 package main
 
 import (
+	"bufio"
 	"crypto/md5"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sort"
 	"strings"
 	"sync"
 )
 
-// var (
-// 	cliDomains = flag.String("csv")
-// )
+var (
+	csvOutput   = flag.Bool("csv", true, "print out info of CSV on every cert")
+	concurrency = flag.Int("thread", 10, "number of thread workers to run")
+)
 
 func main() {
+	flag.Parse()
 
+	var outFunc OutputFunc
+	var outputStream io.Writer
+	outputStream = os.Stdout
+	var inputStream io.Reader
+	inputStream = os.Stdin
+
+	hostChan := make(chan string)
+	if *csvOutput {
+		outFunc = CSV(outputStream)
+		fmt.Fprintf(outputStream, `"%s","%s","%s","%s"`,
+			"domain", "dnsStatus", "fingerprints", "serial")
+	}
+
+	for i := 0; i < *concurrency; i++ {
+		go ScanWorker(hostChan, outFunc)
+	}
+
+	for _, host := range os.Args {
+		hostChan <- host
+	}
+
+	scanner := bufio.NewScanner(inputStream)
+	for scanner.Scan() {
+		hostChan <- scanner.Text()
+	}
 }
 
 type hostList struct {
@@ -157,4 +187,10 @@ func GetCertificates(domain string, commonNames chan<- string, output OutputFunc
 		certSlice = append(certSlice, each)
 	}
 	output(domain, dnsStatus, certSlice...)
+}
+
+func ScanWorker(domains chan string, output OutputFunc) {
+	for elem := range domains {
+		GetCertificates(elem, domains, output)
+	}
 }
