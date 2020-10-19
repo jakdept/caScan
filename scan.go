@@ -33,7 +33,7 @@ func main() {
 	hostChan := make(chan string)
 	if *csvOutput {
 		outFunc = CSV(outputStream)
-		fmt.Fprintf(outputStream, `"%s","%s","%s","%s"`,
+		fmt.Fprintf(outputStream, `"%s","%s","%s","%s"`+"\n",
 			"domain", "dnsStatus", "fingerprints", "serial")
 	}
 
@@ -115,7 +115,7 @@ func CSV(out io.Writer) OutputFunc {
 			serials = append(serials, cert.SerialNumber.String())
 			fingerprints = append(fingerprints, Getx509Fingerprint(cert))
 		}
-		fmt.Fprintf(out, `"%s","%s","%s","%s"`, domain, dnsStatus,
+		fmt.Fprintf(out, `"%s","%s","%s","%s"`+"\n", domain, dnsStatus,
 			strings.Join(fingerprints, "|"), strings.Join(serials, "|"))
 	}
 }
@@ -134,7 +134,7 @@ func WarnFingerprint(out io.Writer, fingerprints ...string) OutputFunc {
 		for _, cert := range certs {
 			certFP := Getx509Fingerprint(cert)
 			if search(certFP) {
-				fmt.Fprintf(out, `"%s","%s","%s"`, domain, dnsStatus,
+				fmt.Fprintf(out, `"%s","%s","%s"`+"\n", domain, dnsStatus,
 					strings.Join(fingerprints, "|"))
 			}
 		}
