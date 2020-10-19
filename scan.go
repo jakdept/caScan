@@ -208,7 +208,10 @@ func GetCertificates(domain string, commonNames chan<- string, output OutputFunc
 		for _, cert := range chain {
 			certs = append(certs, *cert)
 			for _, domain := range cert.DNSNames {
-				commonNames <- domain
+				domain := domain
+				go func() {
+					commonNames <- domain // send when you can
+				}()
 			}
 		}
 	}
