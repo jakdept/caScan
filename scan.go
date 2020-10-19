@@ -5,6 +5,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
+	"fmt"
+	"io"
 	"net"
 	"sort"
 	"strings"
@@ -64,7 +66,50 @@ func uniqStrings(in []string) []string {
 	return in
 }
 
-type outputFunc func(domain, dnsStatus string, certs ...x509.Certificate)
+type OutputFunc func(domain, dnsStatus string, certs ...x509.Certificate)
+
+func WarnFingerprintCSV(out io.Writer, fingerprints ...string) OutputFunc {
+	sort.Strings(fingerprints)
+	search := func(target string) bool {
+		i := sort.SearchStrings(fingerprints, target)
+		if i > 0 && i < len(fingerprints) && fingerprints[i] == target {
+			return true
+		}
+		return false
+	}
+
+	return func(domain, dnsStatus string, certs ...x509.Certificate) {
+		for _, cert := range certs {
+			certFP := Getx509Fingerprint(cert)
+			if search(certFP) {
+				fmt.Fprintf(out, `"%s","%s","%s"`, domain, dnsStatus,
+					strings.Join(fingerprints, "|"))
+			}
+		}
+	}
+}
+
+func WriteFingerprintCSV(out io.Writer) OutputFunc {
+	return func(domain, dnsStatus string, certs ...x509.Certificate) {
+		var fingerprints []string
+		for _, cert := range certs {
+			fingerprints = append(fingerprints, Getx509Fingerprint(cert))
+		}
+		fmt.Fprintf(out, `"%s","%s","%s"`, domain, dnsStatus,
+			strings.Join(fingerprints, "|"))
+	}
+}
+
+func WriteSerialCSV(out io.Writer) OutputFunc {
+	return func(domain, dnsStatus string, certs ...x509.Certificate) {
+		var serials []string
+		for _, cert := range certs {
+			serials = append(serials, cert.SerialNumber.String())
+		}
+		fmt.Fprintf(out, `"%s","%s","%s"`, domain, dnsStatus,
+			strings.Join(serials, "|"))
+	}
+}
 
 const (
 	StatusInvalidDNS       = "invalid dns"
@@ -73,10 +118,10 @@ const (
 	StatusFailedConnection = "failed connection"
 )
 
-func GetCertificates(domain string, commonNames chan<- string, output outputFunc) {
+func GetCertificates(domain string, commonNames chan<- string, output OutputFunc) {
 	dnsStatus := StatusValidDNS
 	if HasWildcard(domain) {
-		dnsStatus = StatusInvalidDNS
+		dnsStatus = StatusWildcard
 		domain = TrimWildcard(domain)
 	}
 
@@ -92,7 +137,7 @@ func GetCertificates(domain string, commonNames chan<- string, output outputFunc
 
 	conn, err := tls.Dial("tcp", domain, nil)
 	if err != nil {
-		dnsStatus = StatusInvalidDNS
+		dnsStatus = StatusFailedConnection
 		output(domain, dnsStatus)
 		return
 	}
@@ -112,5 +157,4 @@ func GetCertificates(domain string, commonNames chan<- string, output outputFunc
 		certSlice = append(certSlice, each)
 	}
 	output(domain, dnsStatus, certSlice...)
-	return
 }
