@@ -2,9 +2,9 @@ package main
 
 import (
 	"crypto/md5"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
-	"fmt"
 	"net"
 	"sort"
 	"strings"
@@ -43,6 +43,10 @@ func Getx509Fingerprint(cert x509.Certificate) string {
 	return hex.EncodeToString(fingerprint[:])
 }
 
+func HasWildcard(host string) bool {
+	return strings.HasPrefix(host, "*.") || strings.Contains(host, ".*.")
+}
+
 func TrimWildcard(host string) string {
 	chunks := strings.Split(host, "*.")
 	return chunks[len(chunks)-1]
@@ -60,13 +64,53 @@ func uniqStrings(in []string) []string {
 	return in
 }
 
-func ProcessDomain(domain string, commonNames chan<- string) {
+type outputFunc func(domain, dnsStatus string, certs ...x509.Certificate)
+
+const (
+	StatusInvalidDNS       = "invalid dns"
+	StatusValidDNS         = "valid dns"
+	StatusWildcard         = "wildcard"
+	StatusFailedConnection = "failed connection"
+)
+
+func GetCertificates(domain string, commonNames chan<- string, output outputFunc) {
+	dnsStatus := StatusValidDNS
+	if HasWildcard(domain) {
+		dnsStatus = StatusInvalidDNS
+		domain = TrimWildcard(domain)
+	}
+
 	if hosts.Mark(domain) {
 		return
 	}
 
 	if !HasDNS(domain) {
-		fmt.Printf(`"%s","%s"\n`, domain, "invalid DNS")
+		dnsStatus = StatusInvalidDNS
+		output(domain, dnsStatus)
+		return
 	}
 
+	conn, err := tls.Dial("tcp", domain, nil)
+	if err != nil {
+		dnsStatus = StatusInvalidDNS
+		output(domain, dnsStatus)
+		return
+	}
+
+	certMap := make(map[string]x509.Certificate)
+	var certSlice []x509.Certificate
+	for _, chain := range conn.ConnectionState().VerifiedChains {
+		for _, cert := range chain {
+			certMap[Getx509Fingerprint(*cert)] = *cert
+			for _, domain := range cert.DNSNames {
+				commonNames <- domain
+			}
+		}
+	}
+
+	for _, each := range certMap {
+		certSlice = append(certSlice, each)
+	}
+	output(domain, dnsStatus, certSlice...)
+	return
 }

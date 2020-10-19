@@ -38,6 +38,25 @@ func TestGetx509Fingerprint(t *testing.T) {
 	assert.Equal(t, Getx509Fingerprint(*cert), "70ff69f510e9e3fb4e56641db8a7cd9d")
 }
 
+func TestHasWildcard(t *testing.T) {
+	for _, tc := range []struct {
+		host string
+		exp  bool
+	}{
+		{"example.com", false},
+		{"not.example.com", false},
+		{"*.example.com", true},
+		{"child.*.example.com", true},
+	} {
+		t.Run(tc.host, func(t *testing.T) {
+			tc := tc
+			t.Parallel()
+			assert.Equal(t, tc.exp, HasWildcard(tc.host))
+		})
+	}
+
+}
+
 func TestTrimWildcard(t *testing.T) {
 	for _, tc := range []struct {
 		host string
@@ -54,7 +73,6 @@ func TestTrimWildcard(t *testing.T) {
 			assert.Equal(t, tc.exp, TrimWildcard(tc.host))
 		})
 	}
-
 }
 
 func TestUniqStrings(t *testing.T) {
