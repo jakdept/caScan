@@ -40,9 +40,12 @@ func main() {
 		GetCertificates(host, outFunc)
 	}
 
-	scanner := bufio.NewScanner(inputStream)
-	for scanner.Scan() {
-		GetCertificates(scanner.Text(), outFunc)
+	fi, _ := os.Stdin.Stat()
+	if (fi.Mode() & os.ModeCharDevice) == 0 {
+		scanner := bufio.NewScanner(inputStream)
+		for scanner.Scan() {
+			GetCertificates(scanner.Text(), outFunc)
+		}
 	}
 }
 
