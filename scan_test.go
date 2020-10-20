@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"testing"
 
@@ -182,12 +183,14 @@ func TestCSV(t *testing.T) {
 		goldie.WithTestNameForDir(true),
 	).Assert(t, t.Name(), buf.Bytes())
 }
+func testOutput(out io.Writer) OutputFunc {
+	return func(domain, dnsStatus string, _ ...x509.Certificate) {
+		fmt.Fprintln(out, domain, dnsStatus)
+	}
+}
 
 func TestGetCertificates(t *testing.T) {
 	buf := &bytes.Buffer{}
-	testOutput := func(domain, dnsStatus string, _ ...x509.Certificate) {
-		fmt.Fprintln(buf, domain, dnsStatus)
-	}
 
 	hosts = hostList{}
 
@@ -206,7 +209,7 @@ func TestGetCertificates(t *testing.T) {
 		"not.example.com",
 	} {
 		t.Run(domain, func(t *testing.T) {
-			GetCertificates(domain, junkChan, testOutput)
+			GetCertificates(domain, junkChan, testOutput(buf))
 		})
 	}
 
@@ -215,21 +218,3 @@ func TestGetCertificates(t *testing.T) {
 		goldie.WithTestNameForDir(true),
 	).Assert(t, t.Name(), buf.Bytes())
 }
-
-func TestScanWorker(t *testing.T) {
-
-}
-
-// this isn't working properly somehow
-// func TestWarnFingerprint(t *testing.T) {
-// 	targets := []string{"a627088f116f56d0d7c665b546b78dbb"}
-// 	buf := bytes.Buffer{}
-
-// 	outTest := WarnFingerprint(&buf, targets...)
-// 	outTest("example.com", "test status", loadCerts(t)...)
-
-// 	goldie.New(t,
-// 		goldie.WithFixtureDir("testdata/golden"),
-// 		goldie.WithTestNameForDir(true),
-// 	).Assert(t, t.Name(), buf.Bytes())
-// }

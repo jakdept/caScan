@@ -38,7 +38,11 @@ func main() {
 	}
 
 	for i := 0; i < *concurrency; i++ {
-		go ScanWorker(hostChan, outFunc)
+		go func() {
+			for elem := range hostChan {
+				GetCertificates(elem, hostChan, outFunc)
+			}
+		}()
 	}
 
 	for _, host := range os.Args {
@@ -212,10 +216,4 @@ func GetCertificates(domain string, commonNames chan<- string, output OutputFunc
 	certs = certs.Dedup()
 
 	output(domain, dnsStatus, certs...)
-}
-
-func ScanWorker(domains chan string, output OutputFunc) {
-	for elem := range domains {
-		GetCertificates(elem, domains, output)
-	}
 }
