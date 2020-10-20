@@ -30,28 +30,19 @@ func main() {
 	var inputStream io.Reader
 	inputStream = os.Stdin
 
-	hostChan := make(chan string)
 	if *csvOutput {
 		outFunc = CSV(outputStream)
 		fmt.Fprintf(outputStream, `"%s","%s","%s","%s"`+"\n",
 			"domain", "dnsStatus", "fingerprints", "serial")
 	}
 
-	for i := 0; i < *concurrency; i++ {
-		go func() {
-			for elem := range hostChan {
-				GetCertificates(elem, hostChan, outFunc)
-			}
-		}()
-	}
-
-	for _, host := range os.Args {
-		hostChan <- host
+	for _, host := range flag.Args() {
+		GetCertificates(host, outFunc)
 	}
 
 	scanner := bufio.NewScanner(inputStream)
 	for scanner.Scan() {
-		hostChan <- scanner.Text()
+		GetCertificates(scanner.Text(), outFunc)
 	}
 }
 
@@ -173,7 +164,7 @@ const (
 	StatusFailedConnection = "failed connection"
 )
 
-func GetCertificates(domain string, commonNames chan<- string, output OutputFunc) {
+func GetCertificates(domain string, output OutputFunc) {
 	dnsStatus := StatusValidDNS
 	if HasWildcard(domain) {
 		if hosts.First(domain) {
@@ -207,9 +198,7 @@ func GetCertificates(domain string, commonNames chan<- string, output OutputFunc
 			certs = append(certs, *cert)
 			for _, domain := range cert.DNSNames {
 				domain := domain
-				go func() {
-					commonNames <- domain // send when you can
-				}()
+				GetCertificates(domain, output)
 			}
 		}
 	}
