@@ -2,7 +2,7 @@ package main
 
 import (
 	"bufio"
-	"crypto/md5"
+	"crypto/md5" //nolint - only used for x509 fingerprinting
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
@@ -17,18 +17,15 @@ import (
 )
 
 var (
-	csvOutput   = flag.Bool("csv", true, "print out info of CSV on every cert")
-	concurrency = flag.Int("thread", 10, "number of thread workers to run")
+	csvOutput = flag.Bool("csv", true, "print out info of CSV on every cert")
 )
 
 func main() {
 	flag.Parse()
 
 	var outFunc OutputFunc
-	var outputStream io.Writer
-	outputStream = os.Stdout
-	var inputStream io.Reader
-	inputStream = os.Stdin
+	outputStream := io.Writer(os.Stdout)
+	inputStream := io.Reader(os.Stdin)
 
 	if *csvOutput {
 		outFunc = CSV(outputStream)
@@ -78,7 +75,7 @@ func HasDNS(host string) bool {
 
 // Getx509Fingerprint returns the fingerprint of a certificate.
 func Getx509Fingerprint(cert x509.Certificate) string {
-	fingerprint := md5.Sum(cert.Raw)
+	fingerprint := md5.Sum(cert.Raw) //nolint only used for x509 fingerprinting
 	return hex.EncodeToString(fingerprint[:])
 }
 
