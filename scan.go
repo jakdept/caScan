@@ -198,7 +198,7 @@ func GetCertificates(domain string, output OutputFunc) {
 			certs = append(certs, *cert)
 			for _, domain := range cert.DNSNames {
 				domain := domain
-				GetCertificates(domain, output)
+				go GetCertificates(domain, output)
 			}
 		}
 	}
