@@ -6,7 +6,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
-	"strings"
 	"testing"
 
 	"github.com/sebdah/goldie"
@@ -186,8 +185,14 @@ func TestCSV(t *testing.T) {
 
 func TestGetCertificates(t *testing.T) {
 	buf := &bytes.Buffer{}
+	testOutput := func(domain, dnsStatus string, _ ...x509.Certificate) {
+		fmt.Fprintln(buf, domain, dnsStatus)
+	}
+
+	hosts = hostList{}
 
 	junkChan := make(chan string)
+	defer close(junkChan)
 	go func() {
 		for {
 			<-junkChan
@@ -195,27 +200,24 @@ func TestGetCertificates(t *testing.T) {
 	}()
 	junkChan <- "lol"
 
-	result := &bytes.Buffer{}
-
 	for _, domain := range []string{
 		"example.com",
 		"*.example.com",
 		"not.example.com",
 	} {
 		t.Run(domain, func(t *testing.T) {
-			GetCertificates(domain, junkChan, CSV(buf))
-			chunks := strings.Split(buf.String(), ",")
-			if len(chunks) > 2 {
-				fmt.Fprintln(result, strings.Join(chunks[:2], ","))
-			}
-			buf.Reset()
+			GetCertificates(domain, junkChan, testOutput)
 		})
 	}
 
 	goldie.New(t,
 		goldie.WithFixtureDir("testdata/golden"),
 		goldie.WithTestNameForDir(true),
-	).Assert(t, t.Name(), result.Bytes())
+	).Assert(t, t.Name(), buf.Bytes())
+}
+
+func TestScanWorker(t *testing.T) {
+
 }
 
 // this isn't working properly somehow

@@ -1,2 +1,3 @@
-"example.com","valid dns"
-"not.example.com","invalid dns"
+example.com valid dns
+*.example.com wildcard
+not.example.com invalid dns

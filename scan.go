@@ -9,7 +9,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"sort"
@@ -64,11 +63,11 @@ func (l *hostList) First(host string) bool {
 	if l.m == nil {
 		l.m = map[string]struct{}{}
 	}
-	_, seen := l.m[host]
-	if !seen {
+	_, present := l.m[host]
+	if !present {
 		l.m[host] = struct{}{}
 	}
-	return !seen
+	return !present
 }
 
 var hosts hostList
@@ -173,7 +172,9 @@ const (
 func GetCertificates(domain string, commonNames chan<- string, output OutputFunc) {
 	dnsStatus := StatusValidDNS
 	if HasWildcard(domain) {
-		dnsStatus = StatusWildcard
+		if hosts.First(domain) {
+			output(domain, StatusWildcard)
+		}
 		domain = TrimWildcard(domain)
 	}
 
@@ -191,7 +192,6 @@ func GetCertificates(domain string, commonNames chan<- string, output OutputFunc
 
 	conn, err := tls.Dial("tcp", domain+":443", nil)
 	if err != nil {
-		log.Println(err)
 		dnsStatus = StatusFailedConnection
 		output(domain, dnsStatus)
 		return
