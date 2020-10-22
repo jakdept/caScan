@@ -189,7 +189,7 @@ func TestCSV(t *testing.T) {
 }
 func testOutput(out io.Writer) OutputFunc {
 	return func(domain, ip, dnsStatus string, _ ...x509.Certificate) {
-		fmt.Fprintln(out, domain, dnsStatus)
+		fmt.Fprintln(out, domain, ip, dnsStatus)
 	}
 }
 

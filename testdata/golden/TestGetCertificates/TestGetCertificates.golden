@@ -1,6 +1,5 @@
-example.com valid dns
-www.example.edu valid dns
-example.com valid dns
-www.example.org valid dns
-wildcard.example.com invalid dns
-not.example.com invalid dns
+example.com 2606:2800:220:1:248:1893:25c8:1946 valid dns
+example.com 93.184.216.34 valid dns
+*.example.com 127.0.0.127 wildcard
+wildcard.example.com 127.0.0.127 invalid dns
+not.example.com 127.0.0.127 invalid dns
