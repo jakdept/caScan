@@ -1,4 +1,6 @@
 example.com valid dns
+www.example.edu valid dns
 example.com valid dns
+www.example.org valid dns
 wildcard.example.com invalid dns
 not.example.com invalid dns

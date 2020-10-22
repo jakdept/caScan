@@ -160,10 +160,12 @@ func WarnFingerprint(out io.Writer, fingerprints ...string) OutputFunc {
 }
 
 const (
-	StatusInvalidDNS       = "invalid dns"
-	StatusValidDNS         = "valid dns"
-	StatusWildcard         = "wildcard"
-	StatusFailedConnection = "failed connection"
+	NoIP                     = "127.0.0.127"
+	StatusInvalidDNS         = "invalid dns"
+	StatusValidDNS           = "valid dns"
+	StatusWildcard           = "wildcard"
+	StatusFailedConnection   = "failed connection"
+	StatusFailedTLSHandshake = "failed tls handshake"
 )
 
 func GetCertificates(domain string, output OutputFunc) {
@@ -174,10 +176,13 @@ func GetCertificates(domain string, output OutputFunc) {
 	if HasWildcard(domain) {
 		// launch the parent domain
 		go GetCertificates(TrimWildcard(domain), output)
-		// replace the wildcard and continue
+		// output a line for the wildcard
+		output(domain, NoIP, StatusWildcard)
+		// replace the wildcard and continue with a likely bunk subdomain
 		domain = "wildcard." + TrimWildcard(domain)
 	}
 
+	// if this domain's already been run, skip
 	if !hosts.First(domain) {
 		return
 	}
@@ -187,22 +192,25 @@ func GetCertificates(domain string, output OutputFunc) {
 	// if there are none, do that.
 	if len(ips) < 1 {
 		dnsStatus = StatusInvalidDNS
-		output(domain, "0.0.0.0", dnsStatus)
+		output(domain, NoIP, dnsStatus)
 		return
 	}
 
 	for _, ip := range GetIPs(domain) {
 		// otherwise, hit on each IP
-		dialer := &net.Dialer{Timeout: *tlsTimeout}
-		conn, err := tls.DialWithDialer(dialer, "tcp", domain+":443", nil)
+		conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: net.ParseIP(ip), Port: 443})
 		if err != nil {
-			dnsStatus = StatusFailedConnection
-			output(domain, "0.0.0.0", dnsStatus)
-			return
+			output(domain, ip, StatusFailedConnection)
+			continue
+		}
+		client := tls.Client(conn, &tls.Config{ServerName: domain})
+		if err = client.Handshake(); err != nil {
+			output(domain, ip, StatusFailedTLSHandshake)
+			continue
 		}
 
 		var certs certSlice
-		for _, chain := range conn.ConnectionState().VerifiedChains {
+		for _, chain := range client.ConnectionState().VerifiedChains {
 			for _, cert := range chain {
 				certs = append(certs, *cert)
 				for _, domain := range cert.DNSNames {
