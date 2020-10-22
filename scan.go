@@ -18,9 +18,20 @@ import (
 )
 
 var (
-	csvOutput  = flag.Bool("csv", true, "print out info of CSV on every cert")
-	tlsTimeout = flag.Duration("timeout", time.Second, "timeout for tls connection")
+	csvOutput   = flag.Bool("csv", true, "print out info of CSV on every cert")
+	tlsTimeout  = flag.Duration("timeout", time.Second*5, "timeout for tls connection")
+	delay       = flag.Duration("delay", time.Millisecond*100, "wait between launching concurrent domains")
+	concurrency = flag.Int("concurrency", 10, "number of domains to start concurrently")
 )
+
+func scanDomain(sem chan bool, domain string, outFunc OutputFunc) {
+	sem <- true
+	time.Sleep(*delay) // wait this long in main thread before queuing up each domain
+	go func() {
+		GetCertificates(domain, outFunc)
+		<-sem
+	}()
+}
 
 func main() {
 	flag.Parse()
@@ -35,15 +46,17 @@ func main() {
 			"domain", "dnsStatus", "fingerprints", "serial")
 	}
 
+	sem := make(chan bool, *concurrency)
 	for _, host := range flag.Args() {
-		GetCertificates(host, outFunc)
+		scanDomain(sem, host, outFunc)
 	}
 
 	fi, _ := os.Stdin.Stat()
 	if (fi.Mode() & os.ModeCharDevice) == 0 {
 		scanner := bufio.NewScanner(inputStream)
 		for scanner.Scan() {
-			GetCertificates(scanner.Text(), outFunc)
+			// GetCertificates(scanner.Text(), outFunc)
+			scanDomain(sem, scanner.Text(), outFunc)
 		}
 	}
 }
@@ -200,6 +213,10 @@ func GetCertificates(domain string, output OutputFunc) {
 		// otherwise, hit on each IP
 		conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: net.ParseIP(ip), Port: 443})
 		if err != nil {
+			output(domain, ip, StatusFailedConnection)
+			continue
+		}
+		if err = conn.SetDeadline(time.Now().Add(*tlsTimeout)); err != nil {
 			output(domain, ip, StatusFailedConnection)
 			continue
 		}
