@@ -14,10 +14,12 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
-	csvOutput = flag.Bool("csv", true, "print out info of CSV on every cert")
+	csvOutput  = flag.Bool("csv", true, "print out info of CSV on every cert")
+	tlsTimeout = flag.Duration("timeout", time.Second, "timeout for tls connection")
 )
 
 func main() {
@@ -188,9 +190,11 @@ func GetCertificates(domain string, output OutputFunc) {
 		output(domain, "0.0.0.0", dnsStatus)
 		return
 	}
+
 	for _, ip := range GetIPs(domain) {
 		// otherwise, hit on each IP
-		conn, err := tls.Dial("tcp", domain+":443", nil)
+		dialer := &net.Dialer{Timeout: *tlsTimeout}
+		conn, err := tls.DialWithDialer(dialer, "tcp", domain+":443", nil)
 		if err != nil {
 			dnsStatus = StatusFailedConnection
 			output(domain, "0.0.0.0", dnsStatus)
