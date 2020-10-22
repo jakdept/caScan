@@ -1,10 +1,6 @@
-www.example.net valid dns
-www.example.edu valid dns
-www.example.com valid dns
-example.org valid dns
-example.net valid dns
-example.edu valid dns
-www.example.org valid dns
-example.com valid dns
-*.example.com wildcard
-not.example.com invalid dns
+1.1.1.1 1.1.1.1 valid dns
+one.one.one.one 2606:4700:4700::1001 valid dns
+*.one.one.one 127.0.0.127 wildcard
+cloudflare-dns.com 2606:4700::6810:f8f9 valid dns
+*.cloudflare-dns.com 127.0.0.127 wildcard
+8.8.8.8 8.8.8.8 valid dns

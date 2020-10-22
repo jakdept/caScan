@@ -14,10 +14,12 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
-	csvOutput = flag.Bool("csv", true, "print out info of CSV on every cert")
+	csvOutput  = flag.Bool("csv", true, "print out info of CSV on every cert")
+	tlsTimeout = flag.Duration("timeout", time.Second, "timeout for tls connection")
 )
 
 func main() {
@@ -67,10 +69,10 @@ func (l *hostList) First(host string) bool {
 
 var hosts hostList
 
-// HasDNS checks a domain to see if it has an A record, or a CNAME resolving to an A record.
-func HasDNS(host string) bool {
+// GetIPs checks a domain to see if it has an A record, or a CNAME resolving to an A record.
+func GetIPs(host string) []string {
 	addrs, _ := net.LookupHost(host)
-	return len(addrs) > 0
+	return addrs
 }
 
 // Getx509Fingerprint returns the fingerprint of a certificate.
@@ -121,17 +123,17 @@ func uniqStrings(s []string) []string {
 	return s
 }
 
-type OutputFunc func(domain, dnsStatus string, certs ...x509.Certificate)
+type OutputFunc func(domain, ip, dnsStatus string, certs ...x509.Certificate)
 
 func CSV(out io.Writer) OutputFunc {
-	return func(domain, dnsStatus string, certs ...x509.Certificate) {
+	return func(domain, ip, dnsStatus string, certs ...x509.Certificate) {
 		var fingerprints []string
 		var serials []string
 		for _, cert := range certs {
 			serials = append(serials, cert.SerialNumber.String())
 			fingerprints = append(fingerprints, Getx509Fingerprint(cert))
 		}
-		fmt.Fprintf(out, `"%s","%s","%s","%s"`+"\n", domain, dnsStatus,
+		fmt.Fprintf(out, `"%s","%s","%s","%s","%s"`+"\n", domain, ip, dnsStatus,
 			strings.Join(fingerprints, "|"), strings.Join(serials, "|"))
 	}
 }
@@ -146,11 +148,11 @@ func WarnFingerprint(out io.Writer, fingerprints ...string) OutputFunc {
 		return false
 	}
 
-	return func(domain, dnsStatus string, certs ...x509.Certificate) {
+	return func(domain, ip, dnsStatus string, certs ...x509.Certificate) {
 		for _, cert := range certs {
 			certFP := Getx509Fingerprint(cert)
 			if search(certFP) {
-				fmt.Fprintf(out, `"%s","%s","%s"`+"\n", domain, dnsStatus,
+				fmt.Fprintf(out, `"%s","%s","%s","%s"`+"\n", domain, ip, dnsStatus,
 					strings.Join(fingerprints, "|"))
 			}
 		}
@@ -158,51 +160,67 @@ func WarnFingerprint(out io.Writer, fingerprints ...string) OutputFunc {
 }
 
 const (
-	StatusInvalidDNS       = "invalid dns"
-	StatusValidDNS         = "valid dns"
-	StatusWildcard         = "wildcard"
-	StatusFailedConnection = "failed connection"
+	NoIP                     = "127.0.0.127"
+	StatusInvalidDNS         = "invalid dns"
+	StatusValidDNS           = "valid dns"
+	StatusWildcard           = "wildcard"
+	StatusFailedConnection   = "failed connection"
+	StatusFailedTLSHandshake = "failed tls handshake"
 )
 
 func GetCertificates(domain string, output OutputFunc) {
+	// remove the port from the domain, if present
+	domain = strings.TrimSuffix(domain, ":")
+
 	dnsStatus := StatusValidDNS
 	if HasWildcard(domain) {
-		if hosts.First(domain) {
-			output(domain, StatusWildcard)
-		}
-		domain = TrimWildcard(domain)
+		// launch the parent domain
+		go GetCertificates(TrimWildcard(domain), output)
+		// output a line for the wildcard
+		output(domain, NoIP, StatusWildcard)
+		// replace the wildcard and continue with a likely bunk subdomain
+		domain = "wildcard." + TrimWildcard(domain)
 	}
 
+	// if this domain's already been run, skip
 	if !hosts.First(domain) {
 		return
 	}
 
-	if !HasDNS(domain) {
+	// enumerate the ip addresses for the domain
+	ips := GetIPs(domain)
+	// if there are none, do that.
+	if len(ips) < 1 {
 		dnsStatus = StatusInvalidDNS
-		output(domain, dnsStatus)
+		output(domain, NoIP, dnsStatus)
 		return
 	}
 
-	domain = strings.Split(domain, ":")[0]
+	for _, ip := range GetIPs(domain) {
+		// otherwise, hit on each IP
+		conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: net.ParseIP(ip), Port: 443})
+		if err != nil {
+			output(domain, ip, StatusFailedConnection)
+			continue
+		}
+		client := tls.Client(conn, &tls.Config{ServerName: domain})
+		if err = client.Handshake(); err != nil {
+			output(domain, ip, StatusFailedTLSHandshake)
+			continue
+		}
 
-	conn, err := tls.Dial("tcp", domain+":443", nil)
-	if err != nil {
-		dnsStatus = StatusFailedConnection
-		output(domain, dnsStatus)
-		return
-	}
-
-	var certs certSlice
-	for _, chain := range conn.ConnectionState().VerifiedChains {
-		for _, cert := range chain {
-			certs = append(certs, *cert)
-			for _, domain := range cert.DNSNames {
-				domain := domain
-				go GetCertificates(domain, output)
+		var certs certSlice
+		for _, chain := range client.ConnectionState().VerifiedChains {
+			for _, cert := range chain {
+				certs = append(certs, *cert)
+				for _, domain := range cert.DNSNames {
+					domain := domain
+					go GetCertificates(domain, output)
+				}
 			}
 		}
-	}
-	certs = certs.Dedup()
+		certs = certs.Dedup()
 
-	output(domain, dnsStatus, certs...)
+		output(domain, ip, dnsStatus, certs...)
+	}
 }

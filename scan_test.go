@@ -50,7 +50,11 @@ func TestCheckDNS(t *testing.T) {
 		t.Run(tc.host, func(t *testing.T) {
 			tc := tc
 			t.Parallel()
-			assert.Equal(t, tc.exp, HasDNS(tc.host))
+			if tc.exp {
+				assert.NotNil(t, GetIPs(tc.host))
+			} else {
+				assert.Nil(t, GetIPs(tc.host))
+			}
 		})
 	}
 }
@@ -176,7 +180,7 @@ func TestCSV(t *testing.T) {
 	buf := bytes.Buffer{}
 
 	outTest := CSV(&buf)
-	outTest("example.com", "test status", loadCerts(t)...)
+	outTest("example.com", "test ip", "test status", loadCerts(t)...)
 
 	goldie.New(t,
 		goldie.WithFixtureDir("testdata/golden"),
@@ -184,8 +188,8 @@ func TestCSV(t *testing.T) {
 	).Assert(t, t.Name(), buf.Bytes())
 }
 func testOutput(out io.Writer) OutputFunc {
-	return func(domain, dnsStatus string, _ ...x509.Certificate) {
-		fmt.Fprintln(out, domain, dnsStatus)
+	return func(domain, ip, dnsStatus string, _ ...x509.Certificate) {
+		fmt.Fprintln(out, domain, ip, dnsStatus)
 	}
 }
 
@@ -204,9 +208,10 @@ func TestGetCertificates(t *testing.T) {
 	junkChan <- "lol"
 
 	for _, domain := range []string{
-		"example.com",
-		"*.example.com",
-		"not.example.com",
+		"1.1.1.1",
+		"8.8.8.8",
+		// "*.example.com",
+		// "not.example.com",
 	} {
 		t.Run(domain, func(t *testing.T) {
 			GetCertificates(domain, testOutput(buf))
