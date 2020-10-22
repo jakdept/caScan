@@ -208,9 +208,10 @@ func TestGetCertificates(t *testing.T) {
 	junkChan <- "lol"
 
 	for _, domain := range []string{
-		"example.com",
-		"*.example.com",
-		"not.example.com",
+		"1.1.1.1",
+		"8.8.8.8",
+		// "*.example.com",
+		// "not.example.com",
 	} {
 		t.Run(domain, func(t *testing.T) {
 			GetCertificates(domain, testOutput(buf))
