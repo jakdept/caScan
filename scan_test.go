@@ -50,7 +50,7 @@ func TestCheckDNS(t *testing.T) {
 		t.Run(tc.host, func(t *testing.T) {
 			tc := tc
 			t.Parallel()
-			assert.Equal(t, tc.exp, HasDNS(tc.host))
+			assert.Equal(t, tc.exp, GetIPs(tc.host))
 		})
 	}
 }
