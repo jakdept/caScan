@@ -42,8 +42,8 @@ func main() {
 
 	if *csvOutput {
 		outFunc = CSV(outputStream)
-		fmt.Fprintf(outputStream, `"%s","%s","%s","%s"`+"\n",
-			"domain", "dnsStatus", "fingerprints", "serial")
+		fmt.Fprintf(outputStream, `"%s","%s","%s","%s","%s"`+"\n",
+			"domain", "ip", "dnsStatus", "fingerprints", "serial")
 	}
 
 	sem := make(chan bool, *concurrency)
