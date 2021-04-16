@@ -1,4 +1,4 @@
-package main
+package dumpCerts
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"io/ioutil"
 	"testing"
 
-	goldie "github.com/sebdah/goldie/v2"
+	"github.com/sebdah/goldie/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
