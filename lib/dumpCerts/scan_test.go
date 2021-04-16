@@ -214,7 +214,7 @@ func TestGetCertificates(t *testing.T) {
 		// "not.example.com",
 	} {
 		t.Run(domain, func(t *testing.T) {
-			GetCertificates(domain, testOutput(buf))
+			GetVerifiedCerts(domain, testOutput(buf))
 		})
 	}
 

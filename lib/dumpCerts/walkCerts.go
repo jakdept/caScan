@@ -21,14 +21,73 @@ var tlsTimeout time.Duration = time.Second
 
 type OutputFunc func(domain, ip, dnsStatus string, certs ...x509.Certificate)
 
-func GetCertificates(domain string, output OutputFunc) {
+func GetReturnedCerts(domain string, output OutputFunc) {
 	// remove the port from the domain, if present
 	domain = strings.TrimSuffix(domain, ":")
 
 	dnsStatus := StatusValidDNS
 	if HasWildcard(domain) {
 		// launch the parent domain
-		go GetCertificates(TrimWildcard(domain), output)
+		go GetReturnedCerts(TrimWildcard(domain), output)
+		// output a line for the wildcard
+		output(domain, NoIP, StatusWildcard)
+		// replace the wildcard and continue with a likely bunk subdomain
+		domain = "wildcard." + TrimWildcard(domain)
+	}
+
+	// if this domain's already been run, skip
+	if !hosts.First(domain) {
+		return
+	}
+
+	// enumerate the ip addresses for the domain
+	ips := GetIPs(domain)
+	// if there are none, do that.
+	if len(ips) < 1 {
+		dnsStatus = StatusInvalidDNS
+		output(domain, NoIP, dnsStatus)
+		return
+	}
+
+	for _, ip := range GetIPs(domain) {
+		// otherwise, hit on each IP
+		conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: net.ParseIP(ip), Port: 443})
+		if err != nil {
+			output(domain, ip, StatusFailedConnection)
+			continue
+		}
+		if err = conn.SetDeadline(time.Now().Add(tlsTimeout)); err != nil {
+			output(domain, ip, StatusFailedConnection)
+			continue
+		}
+		client := tls.Client(conn, &tls.Config{ServerName: domain})
+		if err = client.Handshake(); err != nil {
+			output(domain, ip, StatusFailedTLSHandshake)
+			continue
+		}
+
+		var certs certSlice
+		for _, cert := range client.ConnectionState().PeerCertificates {
+			certs = append(certs, *cert)
+			for _, domain := range cert.DNSNames {
+				domain := domain
+				go GetReturnedCerts(domain, output)
+			}
+		}
+		certs = certs.Dedup()
+
+		output(domain, ip, dnsStatus, certs...)
+	}
+}
+
+func GetVerifiedCerts(domain string, output OutputFunc) {
+	// remove the port from the domain, if present
+	domain = strings.TrimSuffix(domain, ":")
+
+	dnsStatus := StatusValidDNS
+	if HasWildcard(domain) {
+		// launch the parent domain
+		go GetVerifiedCerts(TrimWildcard(domain), output)
 		// output a line for the wildcard
 		output(domain, NoIP, StatusWildcard)
 		// replace the wildcard and continue with a likely bunk subdomain
@@ -72,7 +131,7 @@ func GetCertificates(domain string, output OutputFunc) {
 				certs = append(certs, *cert)
 				for _, domain := range cert.DNSNames {
 					domain := domain
-					go GetCertificates(domain, output)
+					go GetVerifiedCerts(domain, output)
 				}
 			}
 		}
